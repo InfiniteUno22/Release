@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title>Hand of Cards</title>
+</head>
+<body>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script> 
+        const socket = io();
+        const players = {};
+
+        // this creates a container on the DOM
+        function createContainer(container, id) {
+            const newZone = document.createElement('div')
+            for (let i = 0; i < container.length; i++) {
+                newZone.classList.add(container[i])
+            }
+            newZone.id = id
+
+            newZone.addEventListener('dragover', e => {
+                e.preventDefault();
+
+            });
+
+            //make sure you detect if the drop was a selected card
+            newZone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone = [newZone.classList[0], socket.id];
+                socket.emit('cardsDropped', zone);
+            })
+
+            return newZone;
+        }
+
+        //creates a card on the DOM
+        function createCard(cardObject) {
+            const cardDiv = document.createElement('div');
+            const newCard = document.createElement('img')
+            newCard.classList.add('cards')
+            cardDiv.classList.add('draggable')
+            newCard.src = cardObject.artURL;
+            cardDiv.draggable = true;
+            cardDiv.append(newCard);
+
+            // triggers when you start dragging the card
+            cardDiv.addEventListener('dragstart', e => {
+                //emits drag event to server
+                cardData = [cardObject, cardDiv.parentElement.classList]
+                if (!cardDiv.classList.contains('firstSelect')) {
+                    socket.emit('weDrag', cardData);
+                }
+            });
+
+            cardDiv.onclick = () => {
+                // this will select the card
+                const yourHand = document.querySelector('.p1.container');
+                cardData = [cardObject, cardDiv.parentElement.classList]
+                socket.emit("cardClicked", cardData);
+                socket.on('firstSelect', (indexFirstSelected) => {
+                    yourHand.children[indexFirstSelected].classList.add('firstSelect');
+                })
+                socket.on('normalSelect', (selectedCardIndex) => {
+                    yourHand.children[selectedCardIndex].classList.add('selected');
+                })
+                socket.on('deselect', (removedCards) => {
+                    console.log('deselecting');
+                    for (let i = 0; i < yourHand.children.length; i++) {
+                        if (removedCards.includes(i)) {
+                            console.log(yourHand.children[i]);
+                            yourHand.children[i].classList.remove('firstSelect');
+                            yourHand.children[i].classList.remove('selected');
+                        }
+                    }
+                });
+                //if you click on a Gated, it should log the top 3 cards of the gate
+                /*
+                for (let i = 0; i < gates.length; i++) {
+                    const top3 = gates[i].pileColors.length;
+                    if (cardDiv.parentElement.classList.contains(gateTags[i])) {
+                        console.log("Top 3 Gated Cards from Top to Bottom: ");
+                        for (let j = gates[i].pileColors.length - 1; j >= top3 - 3; j--) {
+                            if (j < 0) {
+                                break;
+                            }
+                            console.log(gates[i].pileColors[j]);
+                        }
+                    }
+                }
+                */
+                // if that card is already selected
+                /*
+                if (cardDiv.parentElement.id == 'hand') {
+                    if (Card.selecteds.includes(cardDiv)) {
+                        cardDiv.classList.remove('selected');
+                        // this deselects all cards including and proceeding the deselected card
+                        while (Card.selecteds[Card.selecteds.length - 1] != cardDiv) {
+                            Card.selecteds[Card.selecteds.length - 1].classList.remove('selected');
+                            this.removeSelectCounter(Card.selecteds[Card.selecteds.length - 1]);
+                            Card.selecteds.pop();
+                            this.clearStatics();
+                        }
+                        Card.selecteds.pop(cardDiv);
+                        cardDiv.classList.remove('firstSelect');
+
+                        this.removeSelectCounter(cardDiv);
+                        this.clearStatics();
+                    }
+                    // if this card is not already selected
+                    else {
+                        // if this is the first card you select
+                        if (Card.selectedsSize == 0) {
+                            cardDiv.classList.add('firstSelect');
+                            this.addSelection(cardDiv);
+                            this.addSelectCounter(cardDiv);
+                        }
+                        // if this is not the first card you select AND it shares a color with the last selected card
+                        else if (Card.selectedsSize > 0 && this.shareColors(Card.selectedsColors[Card.selectedsSize - 1])) {
+                            this.addSelection(cardDiv);
+                            this.addSelectCounter(cardDiv);
+                        }
+
+                    }
+                }
+                */
+
+            }
+            return cardDiv;
+
+        }
+
+        console.log(socket);
+
+        socket.on('buildZones', (baseVisuals) => {
+            const body = document.querySelector('body');
+            const opponents = document.createElement('div');
+            opponents.classList.add('container');
+            opponents.classList.add('ops');
+            body.appendChild(opponents);
+            const field = document.createElement('div');
+            field.classList.add('field');
+            body.appendChild(field);
+            field.appendChild(createContainer(baseVisuals[1].container, baseVisuals[1].id));
+            field.appendChild(createContainer(baseVisuals[2].container, baseVisuals[2].id));
+            field.appendChild(createContainer(baseVisuals[3].container, baseVisuals[3].id));
+
+            //creates the drawpile visuals
+            const deck = document.querySelector('#drawPile');
+            const topDeck = document.createElement('img');
+            topDeck.src = 'http://127.0.0.1:8080/back.png';
+            topDeck.id = 'cardBack';
+            const deckCount = document.createElement('h1');
+            deckCount.id = 'drawCount'
+            deck.appendChild(topDeck);
+            deck.appendChild(deckCount);
+            deckCount.innerHTML = baseVisuals[3].pile.length;
+
+            //creates the status bar container
+            body.appendChild(createContainer(baseVisuals[0].container, baseVisuals[0].id));
+            const statusBar = document.createElement('div');
+            statusBar.classList.add('container');
+            statusBar.classList.add('util');
+            body.appendChild(statusBar);
+
+            //displays current player
+            const currP = document.createElement('div');
+            currP.classList.add('currP');
+            const currPValue = document.createElement('h2');
+            socket.on('currP', (currentPlayer) => {
+                console.log(currentPlayer);
+                currPValue.innerHTML = 'P' + currentPlayer + " Turn";
+            })
+            currP.appendChild(currPValue);
+            
+            statusBar.appendChild(currP);
+
+            //adds the passButton
+            const passDiv = document.createElement('div');
+            const passButton = document.createElement('img');
+            passDiv.appendChild(passButton);
+            passButton.src = 'http://127.0.0.1:8080/pass_button.png';
+            passButton.classList.add('cards');
+            statusBar.appendChild(passDiv);
+            passButton.onclick = () => {
+                socket.emit('passButton', (socket.id));
+            }
+
+        });
+
+        socket.on('addNewPlayer', (opData) => {
+            console.log('add new player');
+            let opsZone = document.querySelector('.ops');
+            console.log(opsZone);
+            const opDiv = document.createElement('div');
+            opDiv.classList.add('opDiv');
+            const opNameTag = document.createElement('h2');
+            opDiv.appendChild(opNameTag);
+            const opCardCount = document.createElement('h2');
+            opDiv.appendChild(opCardCount);
+            console.log(opData);
+            if (opData[1].length > 1) {
+                opNameTag.innerHTML = 'P' + opData[0][opData[1][opData[1].length - 1]].pNum;            
+                opCardCount.innerHTML = opData[0][opData[1][opData[1].length - 1]].cardsHandling.length;            
+            }
+            opsZone.appendChild(opDiv);
+        });
+
+        socket.on('addExistingPlayers', (opData) => {
+            console.log('add existing players');
+            let opsZone = document.querySelector('.ops');
+
+            for (let i = 0; i < opData[1].length; i++) {
+                if (opData[1][i] != socket.id) {
+                    const opDiv = document.createElement('div');
+                    opDiv.classList.add('opDiv');
+                    const opNameTag = document.createElement('h2');
+                    opDiv.appendChild(opNameTag);
+                    const opCardCount = document.createElement('h2');
+                    opDiv.appendChild(opCardCount);
+                    opNameTag.innerHTML = 'P' + opData[0][opData[1][i]].pNum;
+                    opCardCount.innerHTML = opData[0][opData[1][i]].cardsHandling.length;
+                    opsZone.appendChild(opDiv);
+                }
+            }
+        })
+
+        socket.on('gateData', (gates) => {
+            const gateDivs = document.querySelectorAll('#gate');
+            const gate0Div = gateDivs[0];
+            const gate1Div = gateDivs[1];
+
+            gate0Div.appendChild(createCard(gates[0].pile[gates[0].pile.length-1]));
+            gate1Div.appendChild(createCard(gates[1].pile[gates[1].pile.length-1]));
+        });
+
+        
+        socket.on('addCards', (player) => {
+            const hand = document.querySelector('#hand');
+            for (let i = 0; i < player.cardsHandling.length; i++) {
+                hand.appendChild(createCard(player.cardsHandling[i]));
+            }
+        });
+
+        socket.on('removeCards', (equivalentIndices) => {
+            console.log('removing cards');
+            const hand = document.querySelector('#hand');
+
+            for (let i = 0; i < equivalentIndices.length; i++) {
+                //ima have to make this a function at some point fr
+                hand.children[equivalentIndices[i]].remove();
+            }
+        });
+
+        socket.on('updateGates', (gateData) => {
+            const gateDivs = document.querySelectorAll('#gate');
+            gateDivs[gateData[0]].appendChild(createCard(gateData[1]));
+
+            while (gateDivs[gateData[0]].childElementCount > 1) {
+                gateDivs[gateData[0]].removeChild(gateDivs[gateData[0]].firstChild);
+            }
+
+            const drawCount = document.querySelector('#drawCount');
+            drawCount.innerHTML = gateData[2];
+        });
+
+        socket.on('fill', (cardsHandling) => {
+            const yourHand = document.querySelector('.p1.container');
+            const numCardsAdded = cardsHandling.length - yourHand.children.length;
+            for (let i = 0; i < numCardsAdded; i++) {
+                yourHand.appendChild(createCard(cardsHandling[yourHand.children.length]));
+            }
+        })
+
+        socket.on('updateHand', (handData) => {
+            const yourHand = document.querySelector('.p1.container');
+            const yourCards = yourHand.children;
+            console.log(handData[0]);
+            console.log(handData[1]);
+            console.log(yourCards.length);
+            for (let i = 0; i < handData[1]; i++) {
+                console.log(handData[0][yourCards.length]);
+                yourHand.appendChild(createCard(handData[0][yourCards.length]));
+            }
+        })
+
+        socket.on('updateOtherPlayers', (opData) => {
+            console.log(socket.id + ' updated');
+            const opDivs = document.querySelectorAll('.opDiv');
+            const ourID = opData[1].indexOf(socket.id);
+            const otherSockets = opData[1].filter(element => element != socket.id);
+            
+            for (let i = 0; i < otherSockets.length; i++) {
+                opDivs[i].children[1].innerHTML = opData[0][otherSockets[i]].cardsHandling.length;
+            }
+            
+        });
+
+
+    </script>
+</body>
+</html>
